@@ -34,7 +34,7 @@
   };
 
   const OPTION_IDS = ['opt-cookies', 'opt-managed', 'opt-async', 'opt-dontfilter'];
-  const STORE_KEY = 'curl2scrapy:options';
+  const STORE_KEY = 'curl-to-scrapy:options';
 
   function loadPrefs() {
     try {

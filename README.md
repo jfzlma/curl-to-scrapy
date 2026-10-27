@@ -1,6 +1,6 @@
-# curl2scrapy
+# curl-to-scrapy
 
-**Try it: https://jfzlma.github.io/curl2scrapy/**
+**Try it: https://jfzlma.github.io/curl-to-scrapy/**
 
 A free, open-source converter that turns a `curl` command into **Scrapy** code:
 

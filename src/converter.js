@@ -1,5 +1,5 @@
 /*!
- * curl2scrapy — convert curl commands into Scrapy code.
+ * curl-to-scrapy — convert curl commands into Scrapy code.
  * MIT License. Runs entirely in the browser (and in Node for tests).
  */
 (function (root, factory) {

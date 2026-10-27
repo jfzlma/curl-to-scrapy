@@ -1,12 +1,12 @@
 {
-  "name": "curl2scrapy",
+  "name": "curl-to-scrapy",
   "version": "0.1.0",
   "description": "Free, open-source curl to Scrapy converter (scrapy shell + spider code). Runs in the browser.",
   "license": "MIT",
-  "homepage": "https://jfzlma.github.io/curl2scrapy/",
+  "homepage": "https://jfzlma.github.io/curl-to-scrapy/",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jfzlma/curl2scrapy.git"
+    "url": "git+https://github.com/jfzlma/curl-to-scrapy.git"
   },
   "main": "src/converter.js",
   "files": ["src/converter.js"],
