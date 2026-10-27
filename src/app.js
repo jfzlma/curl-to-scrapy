@@ -83,6 +83,15 @@
 
   let lastBodyType = null;
 
+  // Usage events for GoatCounter. Only these fixed names are sent, never what was pasted.
+  function track(name) {
+    try {
+      if (window.goatcounter && window.goatcounter.count) window.goatcounter.count({ path: name, title: name, event: true });
+    } catch (e) { /* analytics blocked or not loaded */ }
+  }
+  // Count a conversion once per paste, not on every keystroke.
+  let pendingConvert = false;
+
   function render() {
     const text = input.value.trim();
     if (!text) {
@@ -124,6 +133,10 @@
       const summary = `${r.method} ${r.url}` + (result.bodyType !== 'none' ? ` · ${result.bodyType} body` : '');
       if (result.warnings.length) setStatus('warn', summary, result.warnings);
       else setStatus('ok', summary);
+      if (pendingConvert) {
+        pendingConvert = false;
+        track(`convert/${result.bodyType}`);
+      }
     } catch (err) {
       setStatus('error', err.message);
     }
@@ -187,6 +200,7 @@
     return () => { clearTimeout(t); t = setTimeout(fn, ms); };
   }
 
+  input.addEventListener('paste', () => { pendingConvert = true; });
   input.addEventListener('input', debounce(render, 120));
 
   document.querySelectorAll('input[name="cls"]').forEach((r) => {
@@ -202,6 +216,7 @@
     const key = e.target.value;
     if (!key) return;
     input.value = EXAMPLES[key];
+    track(`example/${key}`);
     e.target.value = '';
     render();
   });
@@ -229,6 +244,7 @@
     btn.addEventListener('click', async () => {
       const code = $(btn.dataset.target);
       if (code.querySelector('.placeholder')) return;
+      track({ 'out-shell': 'copy/shell', 'out-spider': 'copy/spider', 'out-cffi': 'copy/curl_cffi' }[btn.dataset.target]);
       const text = code.textContent;
       try {
         await navigator.clipboard.writeText(text);
