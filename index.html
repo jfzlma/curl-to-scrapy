@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>curl2scrapy</title>
+  <meta name="description" content="Free, open-source converter from curl commands to Scrapy shell and spider code. Runs entirely in your browser.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🕷️</text></svg>">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <h1>curl<span>2</span>scrapy</h1>
+      <p>Paste a curl command, get Scrapy code for the shell and for your spider.</p>
+    </div>
+    <nav>
+      <span class="badge" title="Nothing you paste is sent anywhere">100% client-side</span>
+      <a href="https://github.com/jfzlma/curl2scrapy" target="_blank" rel="noopener">Source</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="panel input-panel">
+      <div class="panel-head">
+        <label for="curl-input">curl command</label>
+        <div class="actions">
+          <select id="examples" aria-label="Load an example">
+            <option value="">Load example…</option>
+            <option value="get">GET with headers &amp; cookies</option>
+            <option value="form">POST form (urlencoded)</option>
+            <option value="json">POST JSON</option>
+            <option value="cmd">Chrome “Copy as cURL (cmd)”</option>
+          </select>
+          <button type="button" id="clear" class="ghost">Clear</button>
+        </div>
+      </div>
+      <textarea id="curl-input" spellcheck="false" autocomplete="off" placeholder="curl 'https://example.com/api' -H 'accept: application/json' ...&#10;&#10;Tip: in DevTools → Network, right-click a request → Copy → Copy as cURL"></textarea>
+
+      <div class="options">
+        <fieldset id="class-picker" hidden>
+          <legend>Request class</legend>
+          <div class="segmented" role="radiogroup">
+            <label><input type="radio" name="cls" value="Request" checked><span>Request</span></label>
+            <label><input type="radio" name="cls" value="FormRequest"><span>FormRequest</span></label>
+            <label><input type="radio" name="cls" value="JsonRequest"><span>JsonRequest</span></label>
+          </div>
+          <p class="hint" id="class-hint"></p>
+        </fieldset>
+
+        <fieldset>
+          <legend>Options</legend>
+          <label class="check"><input type="checkbox" id="opt-cookies" checked> Cookies as <code>cookies={}</code> dict</label>
+          <label class="check"><input type="checkbox" id="opt-managed" checked> Drop headers Scrapy manages (<code>Host</code>, <code>Connection</code>, <code>Accept-Encoding</code>)</label>
+          <label class="check"><input type="checkbox" id="opt-async"> Use <code>async def start()</code> (Scrapy 2.13+)</label>
+          <label class="check"><input type="checkbox" id="opt-dontfilter"> Add <code>dont_filter=True</code></label>
+        </fieldset>
+      </div>
+
+      <div id="status" class="status" role="status" aria-live="polite"></div>
+    </section>
+
+    <section class="outputs">
+      <article class="panel">
+        <div class="panel-head">
+          <h2>Scrapy shell</h2>
+          <button type="button" class="copy" data-target="out-shell">Copy</button>
+        </div>
+        <pre><code id="out-shell" class="py"></code></pre>
+      </article>
+      <article class="panel">
+        <div class="panel-head">
+          <h2>Spider <span class="muted" id="spider-file"></span></h2>
+          <button type="button" class="copy" data-target="out-spider">Copy</button>
+        </div>
+        <pre><code id="out-spider" class="py"></code></pre>
+      </article>
+    </section>
+  </main>
+
+  <footer>
+    MIT licensed · Your curl commands never leave this page (they often contain cookies and tokens).
+  </footer>
+
+  <script src="src/converter.js"></script>
+  <script src="src/app.js"></script>
+</body>
+</html>
