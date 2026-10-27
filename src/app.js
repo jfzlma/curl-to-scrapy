@@ -5,6 +5,7 @@
   const input = $('curl-input');
   const outShell = $('out-shell');
   const outSpider = $('out-spider');
+  const outCffi = $('out-cffi');
   const status = $('status');
   const picker = $('class-picker');
   const hint = $('class-hint');
@@ -33,13 +34,14 @@
   -H ^"user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)^"`,
   };
 
-  const OPTION_IDS = ['opt-cookies', 'opt-managed', 'opt-async', 'opt-dontfilter'];
+  const OPTION_IDS = ['opt-cookies', 'opt-managed', 'opt-legacy', 'opt-dontfilter', 'opt-impersonate'];
   const STORE_KEY = 'curl-to-scrapy:options';
 
   function loadPrefs() {
     try {
       const saved = JSON.parse(localStorage.getItem(STORE_KEY) || '{}');
       OPTION_IDS.forEach((id) => { if (id in saved) $(id).checked = !!saved[id]; });
+      if (saved.target && $('opt-target').querySelector(`option[value="${saved.target}"]`)) $('opt-target').value = saved.target;
     } catch (e) { /* storage unavailable */ }
   }
 
@@ -47,6 +49,7 @@
     try {
       const data = {};
       OPTION_IDS.forEach((id) => { data[id] = $(id).checked; });
+      data.target = $('opt-target').value;
       localStorage.setItem(STORE_KEY, JSON.stringify(data));
     } catch (e) { /* storage unavailable */ }
   }
@@ -85,6 +88,7 @@
     if (!text) {
       outShell.innerHTML = '<span class="placeholder">Scrapy shell code appears here.</span>';
       outSpider.innerHTML = '<span class="placeholder">Spider code appears here.</span>';
+      outCffi.innerHTML = '<span class="placeholder">curl_cffi code appears here.</span>';
       $('spider-file').textContent = '';
       picker.hidden = true;
       setStatus('', '');
@@ -95,8 +99,10 @@
     const opts = {
       cookiesAsDict: $('opt-cookies').checked,
       dropManagedHeaders: $('opt-managed').checked,
-      asyncStart: $('opt-async').checked,
+      legacyStartRequests: $('opt-legacy').checked,
       dontFilter: $('opt-dontfilter').checked,
+      scrapyImpersonate: $('opt-impersonate').checked,
+      impersonateTarget: $('opt-target').value,
       requestClass: selectedClass(),
     };
 
@@ -111,6 +117,7 @@
 
       outShell.innerHTML = highlight(result.shell);
       outSpider.innerHTML = highlight(result.spider);
+      outCffi.innerHTML = highlight(result.curlCffi);
       $('spider-file').textContent = `spiders/${result.spiderName}.py`;
 
       const r = result.request;
@@ -165,7 +172,7 @@
         if (KEYWORDS.has(word)) out += `<span class="tk-k">${word}</span>`;
         else if (CONSTANTS.has(word)) out += `<span class="tk-b">${word}</span>`;
         else if (prevWord === 'class' || prevWord === 'def') out += `<span class="tk-f">${word}</span>`;
-        else if (/^[A-Z]/.test(word) || word === 'fetch') out += `<span class="tk-t">${word}</span>`;
+        else if (/^[A-Z]/.test(word) || word === 'fetch' || word === 'print') out += `<span class="tk-t">${word}</span>`;
         else out += word;
         prevWord = word;
         continue;
@@ -189,7 +196,7 @@
     });
   });
 
-  OPTION_IDS.forEach((id) => $(id).addEventListener('change', () => { savePrefs(); render(); }));
+  OPTION_IDS.concat('opt-target').forEach((id) => $(id).addEventListener('change', () => { savePrefs(); render(); }));
 
   $('examples').addEventListener('change', (e) => {
     const key = e.target.value;

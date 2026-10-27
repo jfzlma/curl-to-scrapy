@@ -51,8 +51,24 @@
           <legend>Options</legend>
           <label class="check"><input type="checkbox" id="opt-cookies" checked> Cookies as <code>cookies={}</code> dict</label>
           <label class="check"><input type="checkbox" id="opt-managed" checked> Drop headers Scrapy manages (<code>Host</code>, <code>Connection</code>, <code>Accept-Encoding</code>)</label>
-          <label class="check"><input type="checkbox" id="opt-async"> Use <code>async def start()</code> (Scrapy 2.13+)</label>
+          <label class="check"><input type="checkbox" id="opt-legacy"> Also support Scrapy &lt; 2.13 (adds <code>start_requests()</code>)</label>
           <label class="check"><input type="checkbox" id="opt-dontfilter"> Add <code>dont_filter=True</code></label>
+        </fieldset>
+
+        <fieldset>
+          <legend>Browser impersonation</legend>
+          <label class="inline-field">Impersonate
+            <select id="opt-target" aria-label="Browser to impersonate">
+              <option value="chrome">chrome</option>
+              <option value="edge">edge</option>
+              <option value="firefox">firefox</option>
+              <option value="safari">safari</option>
+              <option value="chrome_android">chrome_android</option>
+              <option value="safari_ios">safari_ios</option>
+            </select>
+          </label>
+          <label class="check"><input type="checkbox" id="opt-impersonate"> Use <code>scrapy-impersonate</code> in the spider (TLS fingerprint via curl_cffi)</label>
+          <p class="hint">The curl_cffi snippet always impersonates the browser picked here.</p>
         </fieldset>
       </div>
 
@@ -73,6 +89,13 @@
           <button type="button" class="copy" data-target="out-spider">Copy</button>
         </div>
         <pre><code id="out-spider" class="py"></code></pre>
+      </article>
+      <article class="panel">
+        <div class="panel-head">
+          <h2>curl_cffi <span class="muted">standalone test</span></h2>
+          <button type="button" class="copy" data-target="out-cffi">Copy</button>
+        </div>
+        <pre><code id="out-cffi" class="py"></code></pre>
       </article>
     </section>
   </main>

@@ -102,10 +102,14 @@ test('drops headers Scrapy manages and HTTP/2 pseudo headers', () => {
 });
 
 test('spider naming and async start', () => {
-  const out = convert(`curl https://www.books-to-scrape.com/`, { asyncStart: true, dontFilter: true });
+  const out = convert(`curl https://www.books-to-scrape.com/`, { dontFilter: true });
   assert.match(out.spider, /class BooksToScrapeSpider\(scrapy\.Spider\):/);
   assert.match(out.spider, /name = 'books_to_scrape'/);
   assert.match(out.spider, /async def start\(self\):/);
+  assert.doesNotMatch(out.spider, /start_requests/);
+  const legacy = convert(`curl https://x.io/`, { legacyStartRequests: true }).spider;
+  assert.match(legacy, /async def start\(self\):\n        for request in self\.start_requests\(\):\n            yield request/);
+  assert.match(legacy, /def start_requests\(self\):/);
   assert.match(out.spider, /dont_filter=True/);
 });
 
@@ -113,4 +117,42 @@ test('reports helpful errors', () => {
   assert.throws(() => convert(''), /Paste a curl command/);
   assert.throws(() => convert(`curl -H 'A: b'`), /No URL/);
   assert.throws(() => convert(`curl 'https://x.io`), /Unterminated/);
+});
+
+test('scrapy-impersonate adds settings and meta to the spider only', () => {
+  const curl = `curl https://x.io/a -x 127.0.0.1:8080`;
+  const out = convert(curl, { scrapyImpersonate: true, impersonateTarget: 'safari' });
+  assert.match(out.spider, /^# pip install scrapy-impersonate/);
+  assert.match(out.spider, /'https': 'scrapy_impersonate\.ImpersonateDownloadHandler'/);
+  assert.match(out.spider, /'TWISTED_REACTOR': 'twisted\.internet\.asyncioreactor\.AsyncioSelectorReactor'/);
+  assert.match(out.spider, /'USER_AGENT': ''/);
+  assert.match(out.spider, /meta=\{'proxy': 'http:\/\/127\.0\.0\.1:8080', 'impersonate': 'safari'\}/);
+  assert.doesNotMatch(out.shell, /impersonate/);
+  assert.doesNotMatch(convert(curl).spider, /impersonate/);
+});
+
+test('curl_cffi snippet per body type', () => {
+  const get = convert(`curl 'https://x.io/p' -b 's=1'`).curlCffi;
+  assert.match(get, /from curl_cffi import requests/);
+  assert.match(get, /response = requests\.get\(\n    'https:\/\/x\.io\/p',\n    cookies=cookies,\n    impersonate='chrome',\n\)/);
+
+  const json = convert(`curl https://x.io/api -H 'content-type: application/json' -d '{"a":1}'`, { impersonateTarget: 'firefox' }).curlCffi;
+  assert.match(json, /json_data = \{\n    'a': 1,\n\}/);
+  assert.match(json, /json=json_data/);
+  assert.match(json, /impersonate='firefox'/);
+  assert.doesNotMatch(json, /content-type/);
+  assert.match(json, /print\(response\.json\(\)\)/);
+
+  const form = convert(`curl https://x.io -d 'a=1&a=2&b=3'`).curlCffi;
+  assert.match(form, /data = \[\n    \('a', '1'\),\n    \('a', '2'\),\n    \('b', '3'\),\n\]/);
+  assert.match(convert(`curl https://x.io -d 'a=1&b=2'`).curlCffi, /data = \{\n    'a': '1',\n    'b': '2',\n\}/);
+
+  const custom = convert(`curl -X PROPFIND https://x.io`).curlCffi;
+  assert.match(custom, /requests\.request\(\n    'PROPFIND',\n    'https:\/\/x\.io',/);
+});
+
+test('warns when the copied User-Agent contradicts the impersonated browser', () => {
+  const curl = `curl https://x.io -A 'Mozilla/5.0 (Windows NT 10.0) AppleWebKit/537.36 Chrome/141.0 Safari/537.36'`;
+  assert.equal(convert(curl).warnings.length, 0);
+  assert.match(convert(curl, { impersonateTarget: 'firefox' }).warnings.join(), /doesn't look like firefox/);
 });

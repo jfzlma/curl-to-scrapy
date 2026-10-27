@@ -145,6 +145,7 @@ button.done { background: var(--accent); border-color: var(--accent); color: var
 fieldset { border: 0; margin: 10px 0 0; padding: 0; }
 legend { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 6px; }
 .check { display: block; padding-left: 24px; text-indent: -24px; font-size: 14px; margin: 4px 0; cursor: pointer; }
+.inline-field { display: flex; align-items: center; gap: 8px; font-size: 14px; margin: 4px 0 6px; }
 .check input { accent-color: var(--accent); width: 16px; margin: 0 8px 0 0; text-indent: 0; vertical-align: -2px; }
 
 .segmented { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }

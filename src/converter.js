@@ -538,15 +538,11 @@
   }
 
   /**
-   * Build the pieces shared by the shell and spider snippets.
-   * Returns { cls, imports, vars: [[name, code]], kwargs: [[name, code]], notes }
+   * Header dict entries ([name, pythonCode]) for the generated request.
+   * defaultCt: Content-Type the client library sets itself (dropped when equal).
+   * implicitCt: Content-Type to add when curl would have sent one implicitly.
    */
-  function buildRequest(req, analysis, opts, indent) {
-    const notes = [];
-    let cls = opts.requestClass || 'Request';
-    if (!availableClasses(analysis.type).includes(cls)) cls = 'Request';
-
-    // Headers
+  function buildHeaders(req, opts, defaultCt, implicitCt) {
     const headerMap = new Map();
     for (const [name, value] of req.headers) {
       const lower = name.toLowerCase();
@@ -554,18 +550,33 @@
       if (lower === 'content-length') continue;
       if (lower === 'cookie' && opts.cookiesAsDict !== false) continue;
       if (opts.dropManagedHeaders !== false && MANAGED_HEADERS.has(lower)) continue;
-      if (lower === 'content-type' && DEFAULT_CT[cls] && value.trim().toLowerCase() === DEFAULT_CT[cls]) continue;
+      if (lower === 'content-type' && defaultCt && value.trim().toLowerCase() === defaultCt) continue;
       const key = Array.from(headerMap.keys()).find((k) => k.toLowerCase() === lower) || name;
       if (!headerMap.has(key)) headerMap.set(key, []);
       headerMap.get(key).push(value);
     }
-    // curl -d silently sends a form content type; a plain Request must say so explicitly.
-    if (cls === 'Request' && req.body !== null && !req.explicitContentType) {
-      headerMap.set('Content-Type', [analysis.type === 'json' ? 'application/json' : req.contentType]);
-    }
-    const headerEntries = Array.from(headerMap.entries()).map(([k, vs]) => [
+    if (implicitCt && req.body !== null && !req.explicitContentType) headerMap.set('Content-Type', [implicitCt]);
+    return Array.from(headerMap.entries()).map(([k, vs]) => [
       k, vs.length === 1 ? pyStr(vs[0]) : '[' + vs.map(pyStr).join(', ') + ']',
     ]);
+  }
+
+  function pyInlineDict(entries) {
+    return '{' + entries.map(([k, v]) => `${pyStr(k)}: ${v}`).join(', ') + '}';
+  }
+
+  /**
+   * Build the pieces shared by the shell and spider snippets.
+   * Returns { cls, imports, vars: [[name, code]], kwargs: [[name, code]], notes }
+   */
+  function buildRequest(req, analysis, opts, indent, impersonate) {
+    const notes = [];
+    let cls = opts.requestClass || 'Request';
+    if (!availableClasses(analysis.type).includes(cls)) cls = 'Request';
+
+    // curl -d silently sends a form content type; a plain Request must say so explicitly.
+    const implicitCt = cls === 'Request' ? (analysis.type === 'json' ? 'application/json' : req.contentType) : null;
+    const headerEntries = buildHeaders(req, opts, DEFAULT_CT[cls], implicitCt);
 
     const vars = [];
     const kwargs = [['url', pyStr(req.url)]];
@@ -602,7 +613,10 @@
       notes.push('multipart/form-data (-F) is not supported natively by Scrapy; the form fields are listed as a comment.');
     }
 
-    if (req.proxy) kwargs.push(['meta', `{'proxy': ${pyStr(req.proxy)}}`]);
+    const meta = [];
+    if (req.proxy) meta.push(['proxy', pyStr(req.proxy)]);
+    if (impersonate) meta.push(['impersonate', pyStr(impersonate)]);
+    if (meta.length) kwargs.push(['meta', pyInlineDict(meta)]);
 
     if (cls === 'FormRequest' && req.method === 'GET') {
       notes.push('FormRequest with method GET puts formdata in the URL query string, not the body.');
@@ -649,14 +663,20 @@
     return /^[\w@%+=:,./-]+$/.test(s) ? s : "'" + s.replace(/'/g, "'\\''") + "'";
   }
 
+  function impersonateTarget(opts) {
+    return opts.impersonateTarget || 'chrome';
+  }
+
   function generateSpider(req, analysis, opts) {
-    const b = buildRequest(req, analysis, opts, 8);
+    const impersonate = opts.scrapyImpersonate ? impersonateTarget(opts) : null;
+    const b = buildRequest(req, analysis, opts, 8, impersonate);
     const names = spiderNames(req.url);
     const callee = b.cls === 'JsonRequest' ? 'JsonRequest' : `scrapy.${b.cls}`;
     const kwargs = b.kwargs.concat([['callback', 'self.parse']]);
     if (opts.dontFilter) kwargs.push(['dont_filter', 'True']);
 
     const lines = [];
+    if (impersonate) lines.push('# pip install scrapy-impersonate');
     if (b.imports.json) lines.push('import json', '');
     lines.push('import scrapy');
     if (b.cls === 'JsonRequest') lines.push('from scrapy.http import JsonRequest');
@@ -664,8 +684,30 @@
     lines.push(`class ${names.cls}(scrapy.Spider):`);
     lines.push(`    name = ${pyStr(names.name)}`);
     if (names.host) lines.push(`    allowed_domains = [${pyStr(names.host)}]`);
+    if (impersonate) {
+      lines.push('    custom_settings = {');
+      lines.push("        # curl_cffi gives requests a real browser's TLS fingerprint.");
+      lines.push("        'DOWNLOAD_HANDLERS': {");
+      lines.push("            'http': 'scrapy_impersonate.ImpersonateDownloadHandler',");
+      lines.push("            'https': 'scrapy_impersonate.ImpersonateDownloadHandler',");
+      lines.push('        },');
+      lines.push("        'TWISTED_REACTOR': 'twisted.internet.asyncioreactor.AsyncioSelectorReactor',");
+      lines.push("        # Empty, so curl_cffi sends the User-Agent of the impersonated browser.");
+      lines.push("        'USER_AGENT': '',");
+      lines.push('    }');
+    }
     lines.push('');
-    lines.push(opts.asyncStart ? '    async def start(self):' : '    def start_requests(self):');
+    // Scrapy 2.13 added start(); newer versions no longer call start_requests() on their own.
+    if (opts.legacyStartRequests) {
+      lines.push('    async def start(self):');
+      lines.push('        for request in self.start_requests():');
+      lines.push('            yield request');
+      lines.push('');
+      lines.push('    # Used directly by Scrapy < 2.13.');
+      lines.push('    def start_requests(self):');
+    } else {
+      lines.push('    async def start(self):');
+    }
     b.vars.forEach(([name, code]) => { lines.push(`        ${name} = ${code}`); lines.push(''); });
     const mp = multipartComment(req, 8);
     if (mp) lines.push(mp.trimEnd());
@@ -688,11 +730,83 @@
     return { code: lines.join('\n') + '\n', cls: b.cls, notes: b.notes, spiderName: names.name };
   }
 
+  const CFFI_METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']);
+
+  function generateCurlCffi(req, analysis, opts) {
+    const target = impersonateTarget(opts);
+    const notes = [];
+    const defaultCt = { json: 'application/json', form: 'application/x-www-form-urlencoded' }[analysis.type];
+    const implicitCt = analysis.type === 'raw' ? req.contentType : null;
+    const headerEntries = buildHeaders(req, opts, defaultCt, implicitCt);
+
+    const vars = [];
+    const kwargs = [];
+    if (headerEntries.length) {
+      vars.push(['headers', pyDict(headerEntries, 0)]);
+      kwargs.push(['headers', 'headers']);
+    }
+    if (opts.cookiesAsDict !== false && req.cookies.length) {
+      vars.push(['cookies', pyDict(req.cookies.map(([k, v]) => [k, pyStr(v)]), 0)]);
+      kwargs.push(['cookies', 'cookies']);
+    }
+    if (analysis.type === 'json') {
+      vars.push(['json_data', pyJson(analysis.json, 0)]);
+      kwargs.push(['json', 'json_data']);
+    } else if (analysis.type === 'form') {
+      // curl_cffi stringifies list values in a dict, so repeated keys need (key, value) pairs.
+      const repeated = analysis.form.some(([, vs]) => vs.length > 1);
+      const code = repeated
+        ? '[\n' + analysis.form.flatMap(([k, vs]) => vs.map((v) => `    (${pyStr(k)}, ${pyStr(v)}),`)).join('\n') + '\n]'
+        : pyDict(analysis.form.map(([k, vs]) => [k, pyStr(vs[0])]), 0);
+      vars.push(['data', code]);
+      kwargs.push(['data', 'data']);
+    } else if (analysis.type === 'raw') {
+      vars.push(['data', pyStr(req.body)]);
+      kwargs.push(['data', 'data']);
+    } else if (analysis.type === 'multipart') {
+      notes.push('curl_cffi: multipart fields are listed as a comment; build them with curl_cffi.CurlMime.');
+    }
+    if (req.proxy) kwargs.push(['proxy', pyStr(req.proxy)]);
+    kwargs.push(['impersonate', pyStr(target)]);
+
+    const lines = ['# pip install curl_cffi', 'from curl_cffi import requests', ''];
+    vars.forEach(([name, code]) => { lines.push(`${name} = ${code}`); lines.push(''); });
+    const mp = multipartComment(req, 0);
+    if (mp) lines.push(mp.trimEnd());
+    const callee = CFFI_METHODS.has(req.method) ? `requests.${req.method.toLowerCase()}` : 'requests.request';
+    const args = (callee === 'requests.request' ? [pyStr(req.method)] : []).concat(pyStr(req.url));
+    lines.push(`response = ${callee}(`);
+    args.forEach((a) => lines.push(`    ${a},`));
+    kwargs.forEach(([k, v]) => lines.push(`    ${k}=${v},`));
+    lines.push(')');
+    lines.push('print(response.status_code)');
+    lines.push(expectsJson(req, analysis) ? 'print(response.json())' : 'print(response.text[:500])');
+    return { code: lines.join('\n') + '\n', notes };
+  }
+
+  // A copied User-Agent wins over the one curl_cffi would send; flag obvious mismatches.
+  function userAgentNote(req, opts) {
+    const ua = (req.headers.find(([k]) => k.toLowerCase() === 'user-agent') || [])[1];
+    if (!ua) return null;
+    const target = impersonateTarget(opts);
+    const family = target.replace(/[\d_].*$/, '');
+    const matches = {
+      chrome: /Chrome\//.test(ua) && !/Edg\//.test(ua),
+      edge: /Edg\//.test(ua),
+      firefox: /Firefox\//.test(ua),
+      tor: /Firefox\//.test(ua),
+      safari: /Safari\//.test(ua) && !/Chrome\//.test(ua),
+    }[family];
+    if (matches !== false) return null;
+    return `The copied User-Agent doesn't look like ${family}, but it overrides the one curl_cffi sends for impersonate='${target}'. Remove it, or impersonate the browser it came from.`;
+  }
+
   /**
-   * Convert a curl command into Scrapy shell + spider code.
+   * Convert a curl command into Scrapy shell + spider code, plus a curl_cffi snippet.
    * @param {string} curl
    * @param {{requestClass?: 'Request'|'FormRequest'|'JsonRequest', cookiesAsDict?: boolean,
-   *          dropManagedHeaders?: boolean, asyncStart?: boolean, dontFilter?: boolean}} [opts]
+   *          dropManagedHeaders?: boolean, legacyStartRequests?: boolean, dontFilter?: boolean,
+   *          scrapyImpersonate?: boolean, impersonateTarget?: string}} [opts]
    */
   function convert(curl, opts) {
     opts = opts || {};
@@ -700,6 +814,8 @@
     const analysis = analyze(req);
     const shell = generateShell(req, analysis, opts);
     const spider = generateSpider(req, analysis, opts);
+    const cffi = generateCurlCffi(req, analysis, opts);
+    const uaNote = userAgentNote(req, opts);
     return {
       request: req,
       bodyType: analysis.type,
@@ -708,7 +824,8 @@
       shell: shell.code,
       spider: spider.code,
       spiderName: spider.spiderName,
-      warnings: req.warnings.concat(shell.notes),
+      curlCffi: cffi.code,
+      warnings: req.warnings.concat(shell.notes, cffi.notes, uaNote ? [uaNote] : []),
     };
   }
 
