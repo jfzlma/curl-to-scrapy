@@ -43,6 +43,10 @@ jobs:
         run: |
           mkdir _site
           cp -r index.html style.css src _site/
+          # Pages caches every file for 10 minutes; version the asset URLs so a
+          # browser never mixes a new index.html with an old app.js.
+          sed -i -E "s#(href|src)=\"(style\.css|src/[a-z]+\.js)\"#\1=\"\2?v=${GITHUB_SHA::8}\"#g" _site/index.html
+          grep -c "?v=${GITHUB_SHA::8}" _site/index.html
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
       - id: deployment
