@@ -212,6 +212,19 @@
     input.focus();
   });
 
+  // Spider and curl_cffi start collapsed; the whole header toggles, except the Copy button.
+  document.querySelectorAll('.toggle').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const open = btn.getAttribute('aria-expanded') !== 'true';
+      btn.setAttribute('aria-expanded', String(open));
+      $(btn.getAttribute('aria-controls')).hidden = !open;
+      btn.closest('.panel').classList.toggle('collapsed', !open);
+    });
+    btn.closest('.panel-head').addEventListener('click', (e) => {
+      if (!e.target.closest('button')) btn.click();
+    });
+  });
+
   document.querySelectorAll('.copy').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const code = $(btn.dataset.target);
