@@ -42,7 +42,7 @@ jobs:
       - name: Collect site files
         run: |
           mkdir _site
-          cp -r index.html style.css sitemap.xml src _site/
+          cp -r index.html style.css sitemap.xml googlefe4e46d629ba075d.html src _site/
           # Pages caches every file for 10 minutes; version the asset URLs so a
           # browser never mixes a new index.html with an old app.js.
           sed -i -E "s#(href|src)=\"(style\.css|src/[a-z]+\.js)\"#\1=\"\2?v=${GITHUB_SHA::8}\"#g" _site/index.html
