@@ -156,3 +156,16 @@ test('warns when the copied User-Agent contradicts the impersonated browser', ()
   assert.equal(convert(curl).warnings.length, 0);
   assert.match(convert(curl, { impersonateTarget: 'firefox' }).warnings.join(), /doesn't look like firefox/);
 });
+
+test('flags short-lived headers like CSRF tokens', () => {
+  const w = convert(`curl 'https://x.io/api' -H 'X-CSRF-Token: abc' -H 'X-Request-Nonce: 1' -H 'Accept: */*'`).warnings.join('\n');
+  assert.match(w, /X-CSRF-Token, X-Request-Nonce look short-lived/);
+  assert.doesNotMatch(w, /Accept/);
+  assert.doesNotMatch(convert(`curl 'https://x.io/api' -H 'Accept: */*'`).warnings.join(), /short-lived/);
+});
+
+test('rejects commands that are not curl', () => {
+  assert.throws(() => parseCurl(`node -e "convert('curl https://x.io')"`), /starts with "node"/);
+  assert.equal(parseCurl('https://x.io/p').url, 'https://x.io/p');
+  assert.equal(parseCurl('localhost -H "A: b"').url, 'http://localhost');
+});

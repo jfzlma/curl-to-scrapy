@@ -146,6 +146,10 @@
     const tokens = tokenize(input);
     if (tokens[0] && /(^|[\\/])curl(\.exe)?$/i.test(tokens[0])) tokens.shift();
     if (!tokens.length) throw new Error('Paste a curl command to convert');
+    // A bare word with no dot is another program (node, wget, python), not a URL.
+    if (/^[a-z][\w-]*$/i.test(tokens[0]) && tokens[0].toLowerCase() !== 'localhost') {
+      throw new Error(`This doesn't look like a curl command (it starts with "${tokens[0]}"). Paste only the curl part.`);
+    }
 
     const st = {
       url: null, method: null, headers: [], data: [], urlQueries: [], forms: [],
@@ -801,6 +805,15 @@
     return `The copied User-Agent doesn't look like ${family}, but it overrides the one curl_cffi sends for impersonate='${target}'. Remove it, or impersonate the browser it came from.`;
   }
 
+  // Tokens tied to the browser session or to this one request; replaying them later usually fails.
+  const SHORT_LIVED_HEADERS = /(csrf|xsrf)|(^|-)(nonce|signature)$|^x-amz-(date|security-token)$/i;
+
+  function shortLivedHeadersNote(req) {
+    const names = req.headers.map(([k]) => k).filter((k) => SHORT_LIVED_HEADERS.test(k));
+    if (!names.length) return null;
+    return `${names.join(', ')} ${names.length > 1 ? 'look' : 'looks'} short-lived (tied to the session or signed per request). The copied value will likely expire; fetch a fresh one in the spider, e.g. from the page or a cookie.`;
+  }
+
   /**
    * Convert a curl command into Scrapy shell + spider code, plus a curl_cffi snippet.
    * @param {string} curl
@@ -816,6 +829,7 @@
     const spider = generateSpider(req, analysis, opts);
     const cffi = generateCurlCffi(req, analysis, opts);
     const uaNote = userAgentNote(req, opts);
+    const shortLivedNote = shortLivedHeadersNote(req);
     return {
       request: req,
       bodyType: analysis.type,
@@ -825,7 +839,7 @@
       spider: spider.code,
       spiderName: spider.spiderName,
       curlCffi: cffi.code,
-      warnings: req.warnings.concat(shell.notes, cffi.notes, uaNote ? [uaNote] : []),
+      warnings: req.warnings.concat(shell.notes, cffi.notes, uaNote ? [uaNote] : [], shortLivedNote ? [shortLivedNote] : []),
     };
   }
 
