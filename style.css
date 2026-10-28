@@ -193,6 +193,30 @@ pre code { font-size: inherit; }
 .tk-f { color: var(--tk-f); font-weight: 600; }
 .tk-t { color: var(--tk-t); }
 
+.docs {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 8px 24px 24px;
+}
+.docs > * { max-width: 760px; }
+.docs h2 { font-size: 18px; margin: 28px 0 10px; }
+.docs h2:first-child { margin-top: 12px; }
+.docs ol, .docs ul { margin: 0; padding-left: 22px; }
+.docs li { margin: 6px 0; }
+.docs details { border-top: 1px solid var(--border); padding: 10px 0; }
+.docs details:last-child { border-bottom: 1px solid var(--border); }
+.docs summary { cursor: pointer; font-weight: 600; }
+.docs summary:hover { color: var(--accent); }
+.docs details p { margin: 8px 0 0; color: var(--muted); }
+kbd {
+  font: 12px var(--mono);
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--panel);
+}
+
 footer {
   max-width: 1400px;
   margin: 0 auto;
@@ -211,6 +235,7 @@ footer p { margin: 0; }
   main { grid-template-columns: 1fr; padding: 0 16px 16px; }
   .top { flex-direction: column; align-items: flex-start; padding: 20px 16px 12px; }
   .input-panel { position: static; }
+  .docs { padding: 8px 16px 16px; }
   footer { padding: 8px 16px 24px; }
   .segmented span { padding: 6px 10px; }
 }

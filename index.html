@@ -3,8 +3,32 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>curl-to-scrapy</title>
-  <meta name="description" content="Free, open-source converter from curl commands to Scrapy shell and spider code. Runs entirely in your browser.">
+  <title>curl to Scrapy Converter: cURL to Scrapy Request, Spider &amp; curl_cffi</title>
+  <meta name="description" content="Convert a curl command (Copy as cURL from DevTools) into Scrapy code: a scrapy shell snippet, a runnable spider, and a curl_cffi script. Free, open source, runs in your browser.">
+  <link rel="canonical" href="https://jfzlma.github.io/curl-to-scrapy/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="curl-to-scrapy">
+  <meta property="og:title" content="curl to Scrapy Converter">
+  <meta property="og:description" content="Paste a curl command, get a Scrapy shell snippet, a runnable spider and a curl_cffi test script. Runs entirely in your browser.">
+  <meta property="og:url" content="https://jfzlma.github.io/curl-to-scrapy/">
+  <meta name="twitter:card" content="summary">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "curl-to-scrapy",
+    "alternateName": "curl to Scrapy converter",
+    "url": "https://jfzlma.github.io/curl-to-scrapy/",
+    "description": "Converts curl commands into Scrapy shell snippets, Scrapy spiders and curl_cffi scripts, entirely in the browser.",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "Any",
+    "browserRequirements": "Requires JavaScript",
+    "isAccessibleForFree": true,
+    "license": "https://opensource.org/licenses/MIT",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+    "sameAs": "https://github.com/jfzlma/curl-to-scrapy"
+  }
+  </script>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🕷️</text></svg>">
   <link rel="stylesheet" href="style.css">
 </head>
@@ -12,7 +36,7 @@
   <header class="top">
     <div class="brand">
       <h1>curl<span>-to-</span>scrapy</h1>
-      <p>Paste a curl command, get Scrapy code for the shell and for your spider.</p>
+      <p>Convert a curl command into Scrapy code for the shell and for your spider.</p>
     </div>
     <nav>
       <span class="badge" title="Nothing you paste is sent anywhere">100% client-side</span>
@@ -99,6 +123,44 @@
       </article>
     </section>
   </main>
+
+  <section class="docs" aria-labelledby="docs-title">
+    <h2 id="docs-title">How to convert a curl command to Scrapy</h2>
+    <ol>
+      <li>Open the page you want to scrape and open DevTools (<kbd>F12</kbd>), then the <strong>Network</strong> tab.</li>
+      <li>Reload the page and find the request that returns the data. Filtering by <strong>Fetch/XHR</strong> often finds the JSON API behind the page.</li>
+      <li>Right-click the request and choose <strong>Copy &rarr; Copy as cURL</strong>. Both the bash and Windows (cmd) formats work.</li>
+      <li>Paste it above. Run the <strong>Scrapy shell</strong> snippet to try the request, then copy the <strong>Spider</strong> into your project.</li>
+    </ol>
+
+    <h2>What you get</h2>
+    <ul>
+      <li><strong>Scrapy shell snippet</strong>: builds the <code>scrapy.Request</code> and calls <code>fetch()</code>, so you can inspect the response straight away.</li>
+      <li><strong>Runnable spider</strong>: a complete spider with a <code>parse</code> callback, plus an optional <code>start_requests()</code> for Scrapy older than 2.13.</li>
+      <li><strong>curl_cffi script</strong>: replays the request with a real browser TLS fingerprint, to check whether the site blocks on fingerprinting rather than headers.</li>
+      <li><strong>The right request class</strong>: <code>FormRequest</code> with a <code>formdata</code> dict for form posts, <code>JsonRequest</code> for JSON bodies, or a plain <code>Request</code> that sends the body byte for byte.</li>
+      <li><strong>Browser impersonation</strong>: optional <code>scrapy-impersonate</code> settings, with a warning when the copied User-Agent doesn't match the browser you impersonate.</li>
+      <li><strong>Honest warnings</strong>: curl features that can't be reproduced exactly, such as <code>@file</code> bodies, multipart uploads and digest or NTLM auth, are flagged instead of silently dropped.</li>
+    </ul>
+
+    <h2>FAQ</h2>
+    <details>
+      <summary>Is it safe to paste curl commands with cookies or tokens?</summary>
+      <p>Yes. The converter runs entirely in your browser and nothing you paste is sent anywhere. The code is open source, so you can check, or download the repo and open <code>index.html</code> offline.</p>
+    </details>
+    <details>
+      <summary>How is this different from <code>scrapy.Request.from_curl()</code>?</summary>
+      <p><code>Request.from_curl()</code> builds a request object at runtime and ignores options it doesn't understand. This tool gives you readable code to edit (headers, a cookies dict, form or JSON payloads), a full spider, a curl_cffi check script and warnings about anything that won't translate exactly.</p>
+    </details>
+    <details>
+      <summary>Why does the request work in my browser but get a 403 in Scrapy?</summary>
+      <p>Often the site checks the TLS or HTTP/2 fingerprint, not just headers. Run the generated curl_cffi script: if it succeeds while plain Scrapy fails, enable the <code>scrapy-impersonate</code> option for the spider.</p>
+    </details>
+    <details>
+      <summary>Which Scrapy versions are supported?</summary>
+      <p>The spider targets current Scrapy and its <code>start()</code> method. Tick &ldquo;Also support Scrapy &lt; 2.13&rdquo; to add <code>start_requests()</code> for older versions. The generated code is tested against the real Scrapy, scrapy-impersonate and curl_cffi libraries.</p>
+    </details>
+  </section>
 
   <footer>
     <p>MIT licensed · Your curl commands never leave this page (they often contain cookies and tokens). Anonymous visit counts via <a href="https://www.goatcounter.com" target="_blank" rel="noopener">GoatCounter</a>, no cookies.</p>
