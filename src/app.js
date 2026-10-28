@@ -23,7 +23,7 @@
   -H 'origin: https://quotes.toscrape.com' \\
   -b 'session=abc123' \\
   --data-raw 'csrf_token=XyZ123&username=admin&password=admin'`,
-    json: `curl 'https://api.example.com/v2/search' \\
+    json: `curl 'https://httpbin.org/anything/v2/search' \\
   -H 'accept: application/json' \\
   -H 'authorization: Bearer eyJhbGciOi...' \\
   -H 'content-type: application/json' \\
