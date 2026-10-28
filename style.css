@@ -127,7 +127,10 @@ main {
 .toggle svg { color: var(--muted); transition: transform 0.15s; }
 .toggle[aria-expanded="true"] svg { transform: rotate(90deg); }
 .muted { color: var(--muted); font-weight: 400; font-family: var(--mono); font-size: 12px; }
-.actions { display: flex; gap: 8px; }
+.actions { display: flex; gap: 8px; min-width: 0; }
+.actions select { min-width: 0; text-overflow: ellipsis; }
+.actions button { flex: none; }
+.panel-head label { white-space: nowrap; }
 
 .input-panel { position: sticky; top: 16px; }
 
