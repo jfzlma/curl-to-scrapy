@@ -34,7 +34,7 @@
   -H ^"user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)^"`,
   };
 
-  const OPTION_IDS = ['opt-cookies', 'opt-managed', 'opt-legacy', 'opt-dontfilter', 'opt-impersonate'];
+  const OPTION_IDS = ['opt-cookies', 'opt-managed', 'opt-legacy', 'opt-dontfilter', 'opt-impersonate', 'opt-history'];
   const STORE_KEY = 'curl-to-scrapy:options';
 
   function loadPrefs() {
@@ -52,6 +52,55 @@
       data.target = $('opt-target').value;
       localStorage.setItem(STORE_KEY, JSON.stringify(data));
     } catch (e) { /* storage unavailable */ }
+  }
+
+  // Opt-in history. Commands are redacted before they are written, so storage
+  // never holds cookies, auth headers or password/token fields.
+  const HISTORY_KEY = 'curl-to-scrapy:history';
+  const HISTORY_MAX = 5;
+  const historyMenu = $('history');
+
+  function loadHistory() {
+    try {
+      const list = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+      return Array.isArray(list) ? list : [];
+    } catch (e) { return []; }
+  }
+
+  function storeHistory(list) {
+    try {
+      if (list.length) localStorage.setItem(HISTORY_KEY, JSON.stringify(list));
+      else localStorage.removeItem(HISTORY_KEY);
+    } catch (e) { /* storage unavailable */ }
+  }
+
+  function historyLabel(req) {
+    try {
+      const u = new URL(req.url);
+      return `${req.method} ${u.host}${u.pathname}`;
+    } catch (e) {
+      return `${req.method} ${req.url}`;
+    }
+  }
+
+  function renderHistoryMenu() {
+    const list = $('opt-history').checked ? loadHistory() : [];
+    historyMenu.length = 1;
+    list.forEach((entry, i) => historyMenu.add(new Option(entry.label, String(i))));
+    historyMenu.hidden = !list.length;
+    $('history-clear').hidden = !list.length;
+  }
+
+  function remember(text, result) {
+    if (!$('opt-history').checked) return;
+    const { curl, removed } = CurlToScrapy.redactCurl(text);
+    const list = loadHistory().filter((entry) => entry.curl !== curl);
+    list.unshift({ curl, label: historyLabel(result.request) });
+    storeHistory(list.slice(0, HISTORY_MAX));
+    $('history-hint').textContent = removed.length
+      ? `Saved with these replaced by REDACTED: ${removed.join(', ')}.`
+      : 'Saved. Nothing that looked secret was found.';
+    renderHistoryMenu();
   }
 
   // Remember which class the user wants per body type, so switching examples keeps intent.
@@ -82,6 +131,7 @@
   }
 
   let lastBodyType = null;
+  let lastOk = null;
 
   // Usage events for GoatCounter. Only these fixed names are sent, never what was pasted.
   function track(name) {
@@ -102,6 +152,7 @@
       picker.hidden = true;
       setStatus('', '');
       lastBodyType = null;
+      lastOk = null;
       return;
     }
 
@@ -133,11 +184,14 @@
       const summary = `${r.method} ${r.url}` + (result.bodyType !== 'none' ? ` · ${result.bodyType} body` : '');
       if (result.warnings.length) setStatus('warn', summary, result.warnings);
       else setStatus('ok', summary);
+      lastOk = { text, result };
       if (pendingConvert) {
         pendingConvert = false;
         track(`convert/${result.bodyType}`);
+        remember(text, result);
       }
     } catch (err) {
+      lastOk = null;
       setStatus('error', err.message);
     }
   }
@@ -221,6 +275,29 @@
     render();
   });
 
+  historyMenu.addEventListener('change', () => {
+    const entry = loadHistory()[Number(historyMenu.value)];
+    historyMenu.value = '';
+    if (!entry) return;
+    input.value = entry.curl;
+    track('history/load');
+    render();
+  });
+
+  $('opt-history').addEventListener('change', () => {
+    if (!$('opt-history').checked) {
+      storeHistory([]);
+      $('history-hint').textContent = 'History is off and anything saved was deleted.';
+    }
+    renderHistoryMenu();
+  });
+
+  $('history-clear').addEventListener('click', () => {
+    storeHistory([]);
+    $('history-hint').textContent = 'History cleared.';
+    renderHistoryMenu();
+  });
+
   $('clear').addEventListener('click', () => {
     input.value = '';
     render();
@@ -245,6 +322,7 @@
       const code = $(btn.dataset.target);
       if (code.querySelector('.placeholder')) return;
       track({ 'out-shell': 'copy/shell', 'out-spider': 'copy/spider', 'out-cffi': 'copy/curl_cffi' }[btn.dataset.target]);
+      if (lastOk) remember(lastOk.text, lastOk.result);
       const text = code.textContent;
       try {
         await navigator.clipboard.writeText(text);
@@ -263,5 +341,6 @@
   });
 
   loadPrefs();
+  renderHistoryMenu();
   render();
 })();

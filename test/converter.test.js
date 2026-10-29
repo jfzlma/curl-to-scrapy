@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { tokenize, parseCurl, convert } = require('../src/converter.js');
+const { tokenize, parseCurl, convert, redactCurl } = require('../src/converter.js');
 
 test('tokenizes bash quoting and line continuations', () => {
   assert.deepEqual(
@@ -155,6 +155,35 @@ test('warns when the copied User-Agent contradicts the impersonated browser', ()
   const curl = `curl https://x.io -A 'Mozilla/5.0 (Windows NT 10.0) AppleWebKit/537.36 Chrome/141.0 Safari/537.36'`;
   assert.equal(convert(curl).warnings.length, 0);
   assert.match(convert(curl, { impersonateTarget: 'firefox' }).warnings.join(), /doesn't look like firefox/);
+});
+
+test('redactCurl removes cookies, auth and secret fields but keeps the request shape', () => {
+  const curl = `curl 'https://u:p@x.io/api?q=shoes&access_token=abc&author=me' \\
+  -H 'accept: application/json' -H 'Authorization: Bearer eyJ.x.y' -H 'x-csrftoken: zzz' \\
+  -H 'Cookie: sid=1; theme=dark' -b 'a=1; b=2' -u admin:hunter2 --compressed \\
+  --data-raw 'username=admin&password=hunter2&remember=1'`;
+  const { curl: out, removed } = redactCurl(curl);
+  for (const secret of ['abc', 'eyJ', 'zzz', 'sid=1', 'a=1', 'hunter2', 'u:p@']) assert.ok(!out.includes(secret), secret);
+  for (const kept of ['q=shoes', 'author=me', 'accept: application/json', 'username=admin', 'remember=1', '--compressed']) assert.ok(out.includes(kept), kept);
+  assert.deepEqual(removed.sort(), ['Authorization', 'Cookie', 'URL credentials', 'access_token', 'cookies', 'password', 'user credentials', 'x-csrftoken']);
+
+  const r = parseCurl(out);
+  assert.equal(r.method, 'POST');
+  assert.deepEqual(r.cookies.map(([k, v]) => k + '=' + v).sort(), ['a=REDACTED', 'b=REDACTED', 'sid=REDACTED', 'theme=REDACTED']);
+  assert.match(r.body, /password=REDACTED/);
+});
+
+test('redactCurl handles JSON bodies, combined flags and cmd quoting', () => {
+  const { curl: json } = redactCurl(`curl https://x.io -sSH'Authorization: k' --json '{"id":12345678901234567890,"api_key":"s3cr3t","nested":{"token":7}}'`);
+  assert.ok(json.includes('"id":12345678901234567890'));
+  assert.ok(json.includes('"api_key":"REDACTED"') && json.includes('"token":"REDACTED"'));
+  assert.ok(json.includes("-sS \\\n  -H 'Authorization: REDACTED'"));
+
+  const { curl: cmd, removed } = redactCurl('curl ^"https://x.io/?a=1^&b=2^" ^\n  -H ^"cookie: s=1^"');
+  assert.equal(cmd, "curl 'https://x.io/?a=1&b=2' \\\n  -H 'cookie: s=REDACTED'");
+  assert.deepEqual(removed, ['cookie']);
+
+  assert.deepEqual(redactCurl(`curl https://x.io -H 'accept: */*'`).removed, []);
 });
 
 test('flags short-lived headers like CSRF tokens', () => {

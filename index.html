@@ -52,6 +52,9 @@
       <div class="panel-head">
         <label for="curl-input">curl command</label>
         <div class="actions">
+          <select id="history" aria-label="Load a recent conversion" hidden>
+            <option value="">Recent…</option>
+          </select>
           <select id="examples" aria-label="Load an example">
             <option value="">Load example…</option>
             <option value="get">GET with headers &amp; cookies</option>
@@ -81,6 +84,12 @@
           <label class="check"><input type="checkbox" id="opt-managed" checked> Drop headers Scrapy manages (<code>Host</code>, <code>Connection</code>, <code>Accept-Encoding</code>)</label>
           <label class="check"><input type="checkbox" id="opt-legacy"> Also support Scrapy &lt; 2.13 (adds <code>start_requests()</code>)</label>
           <label class="check"><input type="checkbox" id="opt-dontfilter"> Add <code>dont_filter=True</code></label>
+        </fieldset>
+
+        <fieldset>
+          <legend>History</legend>
+          <label class="check"><input type="checkbox" id="opt-history"> Remember my last 5 conversions in this browser</label>
+          <p class="hint"><span id="history-hint">Cookies, auth headers and password or token fields are replaced with <code>REDACTED</code> before anything is saved.</span> <button type="button" id="history-clear" class="ghost small" hidden>Clear history</button></p>
         </fieldset>
 
         <fieldset>

@@ -161,6 +161,7 @@ button, select {
 button:hover, select:hover { border-color: var(--accent); }
 button.done { background: var(--accent); border-color: var(--accent); color: var(--panel); }
 .ghost { background: transparent; }
+button.small { font-size: 12px; padding: 1px 8px; margin-left: 4px; }
 
 .options { padding: 4px 14px 8px; border-top: 1px solid var(--border); }
 fieldset { border: 0; margin: 10px 0 0; padding: 0; }

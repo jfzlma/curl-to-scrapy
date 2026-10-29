@@ -814,6 +814,133 @@
     return `${names.join(', ')} ${names.length > 1 ? 'look' : 'looks'} short-lived (tied to the session or signed per request). The copied value will likely expire; fetch a fresh one in the spider, e.g. from the page or a cookie.`;
   }
 
+  // ---------------------------------------------------------------------------
+  // Redaction (for the opt-in history, so secrets are never written to storage)
+  // ---------------------------------------------------------------------------
+
+  const REDACTED = 'REDACTED';
+  const SECRET_HEADERS = /^(cookie|authorization|proxy-authorization)$/i;
+  // Field and header names that usually hold credentials. "auth" skips "author".
+  const SECRET_NAME = /pass|pwd|token|secret|api[-_]?key|auth(?!or)|session|csrf|xsrf|signature|credential/i;
+  const SECRET_OPTIONS = { cookie: 'cookies', user: 'user credentials', 'proxy-user': 'proxy credentials', 'oauth2-bearer': 'bearer token', pass: 'key passphrase' };
+  const BODY_OPTIONS = new Set(['data', 'data-raw', 'data-binary', 'data-ascii', 'data-urlencode', 'json']);
+
+  function safeDecode(s) {
+    try { return decodeURIComponent(s.replace(/\+/g, ' ')); } catch (e) { return s; }
+  }
+
+  // a=1&password=x -> a=1&password=REDACTED
+  function redactPairs(text, removed) {
+    return text.split('&').map((pair) => {
+      const eq = pair.indexOf('=');
+      if (eq === -1) return pair;
+      const name = safeDecode(pair.slice(0, eq));
+      if (!SECRET_NAME.test(name)) return pair;
+      removed.add(name);
+      return pair.slice(0, eq + 1) + REDACTED;
+    }).join('&');
+  }
+
+  // Replaces scalar values of secret-looking keys; leaves the rest of the JSON byte-for-byte.
+  function redactJsonText(text, removed) {
+    return text.replace(/("((?:\\.|[^"\\])*)"\s*:\s*)("(?:\\.|[^"\\])*"|-?\d[\d.eE+-]*|true|false|null)/g, (m, prefix, key, value) => {
+      if (!SECRET_NAME.test(key)) return m;
+      removed.add(key);
+      return `${prefix}"${REDACTED}"`;
+    });
+  }
+
+  function redactUrl(url, removed) {
+    let out = url.replace(/^([a-z][\w+.-]*:\/\/)[^/@\s]+@/i, (m, scheme) => {
+      removed.add('URL credentials');
+      return scheme;
+    });
+    const q = out.indexOf('?');
+    if (q !== -1) {
+      const hash = out.indexOf('#', q);
+      const end = hash === -1 ? out.length : hash;
+      out = out.slice(0, q + 1) + redactPairs(out.slice(q + 1, end), removed) + out.slice(end);
+    }
+    return out;
+  }
+
+  function redactOption(name, value, removed) {
+    if (SECRET_OPTIONS[name]) {
+      removed.add(SECRET_OPTIONS[name]);
+      if (name === 'cookie') return value.split(';').map((c) => c.replace(/=.*/, '=' + REDACTED)).join(';');
+      return REDACTED;
+    }
+    if (name === 'header') {
+      const idx = value.indexOf(':');
+      if (idx === -1) return value;
+      const header = value.slice(0, idx).trim();
+      if (!SECRET_HEADERS.test(header) && !SECRET_NAME.test(header)) return value;
+      if (!value.slice(idx + 1).trim()) return value;
+      removed.add(header);
+      if (/^cookie$/i.test(header)) {
+        return value.slice(0, idx + 1) + ' ' + value.slice(idx + 1).split(';').map((c) => c.trim().replace(/=.*/, '=' + REDACTED)).join('; ');
+      }
+      return `${value.slice(0, idx)}: ${REDACTED}`;
+    }
+    if (BODY_OPTIONS.has(name)) {
+      return /^\s*[[{]/.test(value) ? redactJsonText(value, removed) : redactPairs(value, removed);
+    }
+    if (name === 'form' || name === 'form-string' || name === 'url-query') return redactPairs(value, removed);
+    if (name === 'url' || name === 'proxy') return redactUrl(value, removed);
+    return value;
+  }
+
+  function bashQuote(s) {
+    return /^[\w@%+=:,./-]+$/.test(s) ? s : `'${s.replace(/'/g, `'\\''`)}'`;
+  }
+
+  /**
+   * Return a copy of a curl command with cookies, auth and secret-looking fields
+   * replaced by REDACTED, re-serialised as bash. `removed` names what was redacted.
+   * @param {string} curl
+   * @returns {{curl: string, removed: string[]}}
+   */
+  function redactCurl(curl) {
+    const tokens = tokenize(curl);
+    if (tokens[0] && /(^|[\\/])curl(\.exe)?$/i.test(tokens[0])) tokens.shift();
+    const removed = new Set();
+    const lines = [];
+
+    for (let i = 0; i < tokens.length; i++) {
+      const tok = tokens[i];
+      if (tok === '--') {
+        lines.push(['--'].concat(tokens.slice(i + 1).map((t) => redactUrl(t, removed))));
+        break;
+      }
+      if (tok.startsWith('--')) {
+        const name = tok.slice(2);
+        if (LONG_WITH_VALUE.has(name) && i + 1 < tokens.length) lines.push([tok, redactOption(name, tokens[++i], removed)]);
+        else lines.push([tok]);
+        continue;
+      }
+      if (tok.startsWith('-') && tok.length > 1) {
+        // Split combined short flags so a value can be redacted on its own: -sH'X: y' -> -s -H 'X: y'
+        let switches = '';
+        let pushed = false;
+        for (let j = 1; j < tok.length; j++) {
+          const f = tok[j];
+          if (!SHORT_WITH_VALUE.has(f)) { switches += f; continue; }
+          if (switches) lines.push(['-' + switches]);
+          const value = j + 1 < tok.length ? tok.slice(j + 1) : (i + 1 < tokens.length ? tokens[++i] : null);
+          lines.push(value === null ? ['-' + f] : ['-' + f, redactOption(SHORT_TO_LONG[f] || '-' + f, value, removed)]);
+          pushed = true;
+          break;
+        }
+        if (!pushed && switches) lines.push(['-' + switches]);
+        continue;
+      }
+      lines.push([redactUrl(tok, removed)]);
+    }
+
+    const body = lines.map((parts) => parts.map(bashQuote).join(' ')).join(' \\\n  ');
+    return { curl: body ? `curl ${body}` : 'curl', removed: Array.from(removed) };
+  }
+
   /**
    * Convert a curl command into Scrapy shell + spider code, plus a curl_cffi snippet.
    * @param {string} curl
@@ -843,5 +970,5 @@
     };
   }
 
-  return { tokenize, parseCurl, parseJson, analyze, pyStr, convert };
+  return { tokenize, parseCurl, parseJson, analyze, pyStr, convert, redactCurl };
 });
